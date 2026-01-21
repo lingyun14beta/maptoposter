@@ -67,7 +67,7 @@ def render_poster(G, theme_key, city_text, sub_text):
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.title("🎨 艺术地图工坊 (极速版)")
+    st.title("🎨 艺术地图 ")
     
     city_input = st.text_input("城市名", "Singapore")
     poster_title = st.text_input("海报主标题", value="")
@@ -95,7 +95,7 @@ with col2:
             final_title = poster_title if poster_title else city_input.split(",")[0]
             
             # 第二阶段：下载数据 (最慢的一步，但现在有缓存了！)
-            with st.spinner("💾 正在下载地图数据... (第一次运行比较慢，换颜色会秒开)"):
+            with st.spinner("💾 正在下载地图数据... (运行较慢，敬请谅解)"):
                 try:
                     G = get_map_data((lat, lon), radius, net_type)
                     
