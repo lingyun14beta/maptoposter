@@ -131,7 +131,7 @@ with col1:
         </style>
         <div style='text-align: center; color: #666; font-size: 13px; line-height: 2.0;'>
             <div>🌟 Core Concept by <a href='https://github.com/originalankur/maptoposter' target='_blank' class='footer-link'>originalankur</a></div>
-            <div> Web Adaptation by <span class='gemini-text'>Gemini 3 Pro</span></div>
+            <div> Web Adaptation by <span class='gemini-text'>Gemini 3 Pro & Lingyun </span></div>
             <div style='font-size: 12px; margin-top: 5px;'>Built with <a href='https://streamlit.io' target='_blank' style='text-decoration: none; color: #ff4b4b;'>Streamlit 🎈</a></div>
         </div>
         """,
