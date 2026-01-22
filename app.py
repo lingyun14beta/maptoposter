@@ -4,40 +4,30 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 from geopy.geocoders import Nominatim, ArcGIS
 import os
-import requests  # 使用 Python 原生库下载，更稳定
+import requests
+import re # 用于检测是不是坐标格式
 
 # --- 1. 基础配置 ---
-ox.settings.user_agent = "art-map-poster/12.0"
+ox.settings.user_agent = "art-map-poster/13.0"
 ox.settings.requests_timeout = 60
 
 st.set_page_config(page_title="艺术地图海报工坊", layout="wide")
 
-# --- 2. 核心修复：强力字体下载器 ---
+# --- 2. 字体下载器 ---
 @st.cache_resource
 def get_chinese_font():
-    """
-    下载开源中文字体 (文泉驿微米黑)，解决乱码和报错问题
-    """
     font_name = "wqy-microhei.ttc"
-    # 使用 Google Fonts 或 GitHub 稳定源
     font_url = "https://github.com/anthonyfok/fonts-wqy-microhei/raw/master/wqy-microhei.ttc"
-    
     if not os.path.exists(font_name):
         try:
-            # 使用 requests 下载，显示进度
-            with st.spinner("正在下载中文字体包 (约 5MB)... 请耐心等待..."):
+            with st.spinner("正在初始化字体资源..."):
                 response = requests.get(font_url, timeout=30)
                 with open(font_name, "wb") as f:
                     f.write(response.content)
-            print("字体下载成功！")
-        except Exception as e:
-            st.warning(f"⚠️ 中文字体下载失败，将使用默认字体（中文可能会显示方框）。错误: {e}")
-            return None # 下载失败返回空，避免程序崩溃
-
-    # 返回字体路径
+        except:
+            return None
     return fm.FontProperties(fname=font_name)
 
-# 加载字体
 zh_font = get_chinese_font()
 
 # --- 3. 主题配置 ---
@@ -76,36 +66,39 @@ def format_coords(lat, lon):
     return f"{abs(lat):.4f}° {ns} / {abs(lon):.4f}° {ew}"
 
 def update_subtitle():
+    """输入框回车触发的更新"""
     city = st.session_state.city_key
     if city:
         lat, lon = get_location(city)
         if lat:
             st.session_state.sub_key = format_coords(lat, lon)
 
-# --- 5. 绘图逻辑 (带错误保护) ---
+def is_coordinate_format(text):
+    """判断一段文字长得像不像坐标（包含数字和度数符号）"""
+    if not text: return False
+    # 如果包含数字和 ° 符号，或者 N/S/E/W，就认为是自动生成的坐标
+    return any(char.isdigit() for char in text) and ("°" in text or "/" in text)
+
+# --- 5. 绘图逻辑 ---
 def render_poster(G, theme_key, city_text, sub_text):
     theme = THEMES[theme_key]
-    
     fig, ax = ox.plot_graph(
         G, node_size=0, edge_color=theme["edge"], edge_linewidth=0.4,
         bgcolor=theme["bg"], figsize=(12, 16), show=False, close=False
     )
     
-    # 智能选择字体：如果有中文字体就用，没有就用默认
     font_prop = zh_font if zh_font else None
     
-    # 1. 主标题
+    # 主标题
     ax.text(0.5, 0.12, space_out_text(city_text, 1), transform=ax.transAxes, 
             ha='center', va='center', fontsize=40, color=theme["text"], 
-            fontproperties=font_prop, # 应用字体
-            alpha=0.9)
+            fontproperties=font_prop, alpha=0.9)
     
-    # 2. 副标题
+    # 副标题
     if sub_text and sub_text.strip() != "":
         ax.text(0.5, 0.08, space_out_text(sub_text, 1), transform=ax.transAxes, 
                 ha='center', va='center', fontsize=12, color=theme["text"], 
-                fontproperties=font_prop, # 应用字体
-                alpha=0.7) 
+                fontproperties=font_prop, alpha=0.7) 
             
     ax.axhline(y=0.15, xmin=0.3, xmax=0.7, color=theme["edge"], linewidth=1, alpha=0.5)
     return fig
@@ -115,10 +108,10 @@ col1, col2 = st.columns([1, 2])
 
 with col1:
     st.title("🎨 艺术地图工坊")
-    st.caption("✅ 正在运行 v12.0 ")
+    st.caption("✅ v13.0 ")
     
-    city_input = st.text_input("城市名 ", "上海", key="city_key", on_change=update_subtitle)
-    poster_title = st.text_input("海报主标题 ", value="")
+    city_input = st.text_input("城市名", "上海", key="city_key", on_change=update_subtitle)
+    poster_title = st.text_input("海报主标题 (支持中文)", value="")
     poster_subtitle = st.text_input("海报副标题", "31.2304° N / 121.4737° E", key="sub_key")
     
     radius = st.slider("视野范围 (米)", 1000, 5000, 2000, step=500)
@@ -147,10 +140,26 @@ with col1:
 
 with col2:
     if btn:
+        # 1. 先获取当前输入城市的真实坐标
         lat, lon = get_location(city_input)
+        
         if lat:
             final_title = poster_title if poster_title else city_input
-            final_sub = poster_subtitle
+            
+            # --- 🔥 智能纠错逻辑 ---
+            # 如果用户没有写自定义的文字（输入框里看起来还是坐标格式），
+            # 那么强制用当前城市的真实坐标覆盖它！防止出现"北京地图+上海坐标"的乌龙。
+            current_real_coords = format_coords(lat, lon)
+            
+            # 判断逻辑：如果用户填的是坐标格式，且跟真实坐标不一样，那就修成真实的
+            if is_coordinate_format(poster_subtitle) and poster_subtitle != current_real_coords:
+                final_sub = current_real_coords
+                # 可选：提示用户纠错
+                st.toast(f"📍 已自动修正为 {city_input} 的正确坐标", icon="🔧")
+            else:
+                final_sub = poster_subtitle
+            # ---------------------
+
             with st.spinner(f"💾 正在下载数据..."):
                 try:
                     G = get_map_data((lat, lon), radius, net_type)
